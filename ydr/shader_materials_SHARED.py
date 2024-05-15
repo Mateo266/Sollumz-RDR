@@ -274,24 +274,6 @@ def create_tinted_geometry_graph():  # move to blenderhelper.py?
     sepn = gnt.nodes.new("ShaderNodeSeparateXYZ")
     gnt.links.new(input.outputs[1], sepn.inputs[0])
 
-    preview = gnt.nodes.new("ShaderNodeMath")
-    preview[3].operation = "DIVIDE"
-    gnt.links.new(input.outputs[2], preview.inputs[0])
-    preview.inputs[1].default_value = 255
-    gnt.links.new(mathns[0].outputs[0], preview.inputs[1])
-
-    compare = gnt.nodes.new("FunctionNodeCompare")
-    compare.data_type = "FLOAT"
-    gnt.links.new(preview.outputs[0], compare.inputs[0])
-
-    switch = gnt.nodes.new("GeometryNodeSwitch")
-    switch.input_type = "FLOAT"
-    gnt.links.new(compare.outputs[0], switch.inputs[0])
-    gnt.links.new(preview.outputs[0], switch.inputs[3])
-    gnt.links.new(sepn.outputs[2], switch.inputs[2])
-
-
-
     # create math nodes
     mathns = []
     for i in range(9):
@@ -301,7 +283,7 @@ def create_tinted_geometry_graph():  # move to blenderhelper.py?
     # Sollumz imports it as sRGB but accessing in the node tree gives you linear color
     # c1
     mathns[0].operation = "LESS_THAN"
-    gnt.links.new(switch.outputs[0], mathns[0].inputs[0])
+    gnt.links.new(sepn.outputs[2], mathns[0].inputs[0])
     mathns[0].inputs[1].default_value = 0.003
     mathns[1].operation = "SUBTRACT"
     gnt.links.new(mathns[0].outputs[0], mathns[1].inputs[1])
@@ -309,7 +291,7 @@ def create_tinted_geometry_graph():  # move to blenderhelper.py?
 
     # r1
     mathns[2].operation = "MULTIPLY"
-    gnt.links.new(switch.outputs[0], mathns[2].inputs[0])
+    gnt.links.new(sepn.outputs[2], mathns[2].inputs[0])
     mathns[2].inputs[1].default_value = 12.920
     mathns[3].operation = "MULTIPLY"
     gnt.links.new(mathns[2].outputs[0], mathns[3].inputs[0])
@@ -317,7 +299,7 @@ def create_tinted_geometry_graph():  # move to blenderhelper.py?
 
     # r2
     mathns[4].operation = "POWER"
-    gnt.links.new(switch.outputs[0], mathns[4].inputs[0])
+    gnt.links.new(sepn.outputs[2], mathns[4].inputs[0])
     mathns[4].inputs[1].default_value = 0.417
     mathns[5].operation = "MULTIPLY"
     gnt.links.new(mathns[4].outputs[0], mathns[5].inputs[0])
@@ -357,9 +339,24 @@ def create_tinted_geometry_graph():  # move to blenderhelper.py?
     gnt.links.new(pal_div.outputs[0], pal_flip_uv_sub.inputs[0])
     gnt.links.new(pal_flip_uv_sub.outputs[0], pal_flip_uv_mult.inputs[0])
 
+    preview = gnt.nodes.new("ShaderNodeMath")
+    preview.operation = "DIVIDE"
+    gnt.links.new(input.outputs[2], preview.inputs[0])
+    preview.inputs[1].default_value = 256
+
+    compare = gnt.nodes.new("FunctionNodeCompare")
+    compare.data_type = "FLOAT"
+    gnt.links.new(preview.outputs[0], compare.inputs[0])
+
+    switch = gnt.nodes.new("GeometryNodeSwitch")
+    switch.input_type = "FLOAT"
+    gnt.links.new(compare.outputs[0], switch.inputs[0])
+    gnt.links.new(preview.outputs[0], switch.inputs[3])
+    gnt.links.new(mathns[8].outputs[0], switch.inputs[2])
+
     # create and link vector
     comb = gnt.nodes.new("ShaderNodeCombineRGB")
-    gnt.links.new(mathns[8].outputs[0], comb.inputs[0])
+    gnt.links.new(switch.outputs[0], comb.inputs[0])
     gnt.links.new(pal_flip_uv_mult.outputs[0], comb.inputs[1])
     gnt.links.new(comb.outputs[0], cptn.inputs[3])
 
