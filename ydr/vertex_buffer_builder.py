@@ -151,7 +151,12 @@ class VertexBufferBuilder:
     def _get_normals(self):
         normals = np.empty(len(self.mesh.loops) * 3, dtype=np.float32)
         self.mesh.loops.foreach_get("normal", normals)
-        return np.reshape(normals, (len(self.mesh.loops), 3))
+        normals_reshaped = np.reshape(normals, (len(self.mesh.loops), 3))
+        if current_game == SollumzGame.GTA:
+            return normals_reshaped
+        elif current_game == SollumzGame.RDR:
+            zeros = np.zeros((len(self.mesh.loops), 1), dtype=np.float32)
+            return  np.concatenate((normals_reshaped, zeros), axis=1)
 
     def _get_weights_indices(self) -> Tuple[NDArray[np.uint32], NDArray[np.uint32]]:
         """Get all BlendWeights and BlendIndices."""
@@ -287,7 +292,4 @@ class VertexBufferBuilder:
 
         tangents = np.reshape(tangents, (num_loops, 3))
         bitangent_signs = np.reshape(bitangent_signs, (-1, 1))
-        if current_game == SollumzGame.GTA:
-            return np.concatenate((tangents, bitangent_signs), axis=1)
-        elif current_game == SollumzGame.RDR:
-            return tangents
+        return np.concatenate((tangents, bitangent_signs), axis=1)
