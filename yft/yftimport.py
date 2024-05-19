@@ -2,7 +2,6 @@ import os
 import bpy
 import numpy as np
 from traceback import format_exc
-from ..cwxml.fragment_RDR import RDRFragment
 from mathutils import Matrix, Vector
 from typing import Optional
 
@@ -11,7 +10,7 @@ from ..tools.blenderhelper import add_child_of_bone_constraint, create_empty_obj
 from ..tools.meshhelper import create_uv_attr
 from ..tools.utils import multiply_homogeneous, get_filename
 from ..shared.shader_nodes import SzShaderNodeParameter
-from ..sollumz_properties import BOUND_TYPES, SollumType, MaterialType, SollumzGame, VehiclePaintLayer
+from ..sollumz_properties import BOUND_TYPES, SollumType, MaterialType, VehiclePaintLayer
 from ..sollumz_preferences import get_import_settings
 from ..cwxml.fragment import YFT, Fragment, PhysicsLOD, PhysicsGroup, PhysicsChild, Window, Archetype, GlassWindow
 from ..cwxml.drawable import Drawable, Bone
@@ -20,27 +19,20 @@ from ..ybn.ybnimport import create_bound_object, set_bound_properties
 from .. import logger
 from .properties import LODProperties, FragArchetypeProperties, GlassTypes, PAINT_LAYER_VALUES, FragmentTemplateAsset
 from ..tools.blenderhelper import get_child_of_bone
-from ..ydr import ydrimport
 
-current_game = SollumzGame.GTA
 
 def import_yft(filepath: str):
-    raise Exception("Fragment import has been disabled as it's Work In Progress")
     import_settings = get_import_settings()
 
+    name = get_filename(filepath)
     yft_xml = YFT.from_xml_file(filepath)
 
-    if isinstance(yft_xml, RDRFragment):
-        global current_game
-        current_game = SollumzGame.RDR
-
     if import_settings.import_as_asset:
-        return create_drawable_as_asset(yft_xml.drawable, yft_xml.name.replace("pack:/", ""), filepath)
+        return create_drawable_as_asset(yft_xml.drawable, name, filepath)
 
-    hi_xml = parse_hi_yft(
-        filepath) if import_settings.import_with_hi else None
+    hi_xml = parse_hi_yft(filepath) if import_settings.import_with_hi else None
 
-    return create_fragment_obj(yft_xml, filepath,
+    return create_fragment_obj(yft_xml, filepath, name,
                                split_by_group=import_settings.split_by_group, hi_xml=hi_xml)
 
 
@@ -58,47 +50,45 @@ def parse_hi_yft(yft_filepath: str) -> Fragment | None:
             f"Could not find _hi yft for {os.path.basename(yft_filepath)}! Make sure there is a file named '{os.path.basename(hi_path)}' in the same directory!")
 
 
-def create_fragment_obj(frag_xml: Fragment, filepath: str, split_by_group: bool = False, hi_xml: Optional[Fragment] = None):
-    ydrimport.current_game = current_game
-    frag_obj = create_frag_armature(frag_xml)
+def create_fragment_obj(frag_xml: Fragment, filepath: str, name: Optional[str] = None, split_by_group: bool = False, hi_xml: Optional[Fragment] = None):
+    frag_obj = create_frag_armature(frag_xml, name)
 
     if hi_xml is not None:
         frag_xml = merge_hi_fragment(frag_xml, hi_xml)
+
     materials = shadergroup_to_materials(
         frag_xml.drawable.shader_group, filepath)
-    if current_game == SollumzGame.GTA:
-        update_mat_paint_layers(materials)
+    update_mat_paint_layers(materials)
 
     drawable_obj = create_fragment_drawable(
         frag_xml, frag_obj, filepath, materials, split_by_group)
 
-    # create_frag_collisions(frag_xml, frag_obj)
+    create_frag_collisions(frag_xml, frag_obj)
 
-    # create_phys_lod(frag_xml, frag_obj)
-    # set_all_bone_physics_properties(frag_obj.data, frag_xml)
+    create_phys_lod(frag_xml, frag_obj)
+    set_all_bone_physics_properties(frag_obj.data, frag_xml)
 
-    # create_phys_child_meshes(frag_xml, frag_obj, drawable_obj, materials)
+    create_phys_child_meshes(frag_xml, frag_obj, drawable_obj, materials)
 
-    # if frag_xml.vehicle_glass_windows:
-    #     create_vehicle_windows(frag_xml, frag_obj, materials)
+    if frag_xml.vehicle_glass_windows:
+        create_vehicle_windows(frag_xml, frag_obj, materials)
 
-    # if frag_xml.glass_windows:
-    #     set_all_glass_window_properties(frag_xml, frag_obj)
+    if frag_xml.glass_windows:
+        set_all_glass_window_properties(frag_xml, frag_obj)
 
-    # if frag_xml.lights:
-    #     create_frag_lights(frag_xml, frag_obj)
+    if frag_xml.lights:
+        create_frag_lights(frag_xml, frag_obj)
 
     return frag_obj
 
 
-def create_frag_armature(frag_xml: Fragment):
+def create_frag_armature(frag_xml: Fragment, name: Optional[str] = None):
     """Create the fragment armature along with the bones and rotation limits."""
-    name = frag_xml.name.replace("pack:/", "")
+    name = name or frag_xml.name.replace("pack:/", "")
     drawable_xml = frag_xml.drawable
     frag_obj = create_armature_obj_from_skel(
         drawable_xml.skeleton, name, SollumType.FRAGMENT)
-    if current_game == SollumzGame.GTA:
-        create_joint_constraints(frag_obj, drawable_xml.joints)
+    create_joint_constraints(frag_obj, drawable_xml.joints)
 
     set_fragment_properties(frag_xml, frag_obj)
 
@@ -107,7 +97,7 @@ def create_frag_armature(frag_xml: Fragment):
 
 def create_fragment_drawable(frag_xml: Fragment, frag_obj: bpy.types.Object, filepath: str, materials: list[bpy.types.Material], split_by_group: bool = False):
     drawable_obj = create_drawable_obj(
-        frag_xml.drawable, filepath, name=f"{frag_obj.name}.mesh", materials=materials, split_by_group=split_by_group, external_armature=frag_obj, game=current_game)
+        frag_xml.drawable, filepath, name=f"{frag_obj.name}.mesh", materials=materials, split_by_group=split_by_group, external_armature=frag_obj)
     drawable_obj.parent = frag_obj
 
     return drawable_obj
@@ -480,12 +470,11 @@ def create_frag_lights(frag_xml: Fragment, frag_obj: bpy.types.Object):
 
 def set_fragment_properties(frag_xml: Fragment, frag_obj: bpy.types.Object):
     # unknown_c0 include "entity class" and "attach bottom end" but those are always 0 in game assets and seem unused
-    if current_game == SollumzGame.GTA:
-        frag_obj.fragment_properties.template_asset = FragmentTemplateAsset((frag_xml.unknown_c0 >> 8) & 0xFF).name
-        frag_obj.fragment_properties.flags = frag_xml.unknown_c4
-        frag_obj.fragment_properties.unbroken_elasticity = frag_xml.unknown_cc
-        frag_obj.fragment_properties.gravity_factor = frag_xml.gravity_factor
-        frag_obj.fragment_properties.buoyancy_factor = frag_xml.buoyancy_factor
+    frag_obj.fragment_properties.template_asset = FragmentTemplateAsset((frag_xml.unknown_c0 >> 8) & 0xFF).name
+    frag_obj.fragment_properties.flags = frag_xml.unknown_c4
+    frag_obj.fragment_properties.unbroken_elasticity = frag_xml.unknown_cc
+    frag_obj.fragment_properties.gravity_factor = frag_xml.gravity_factor
+    frag_obj.fragment_properties.buoyancy_factor = frag_xml.buoyancy_factor
 
 
 def set_lod_properties(lod_xml: PhysicsLOD, lod_props: LODProperties):

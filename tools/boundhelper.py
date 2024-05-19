@@ -1,8 +1,8 @@
 import bpy
 
-from ..sollumz_properties import SollumType, BOUND_TYPES, SollumzGame
+from ..sollumz_properties import SollumType, BOUND_TYPES
 from ..tools.meshhelper import create_box
-from ..ybn.properties import load_flag_presets, flag_presets, BoundFlags, RDRBoundFlags
+from ..ybn.properties import load_flag_presets, flag_presets, BoundFlags
 from .blenderhelper import create_blender_object, create_empty_object, remove_number_suffix
 from mathutils import Vector
 
@@ -116,23 +116,22 @@ def constrain_bound(obj: bpy.types.Object):
     constraint.max_z = 1
 
 
-def convert_objs_to_composites(objs: list[bpy.types.Object], bound_child_type: SollumType, apply_default_flags: bool = False, sollum_game_type: SollumzGame = SollumzGame.GTA):
+def convert_objs_to_composites(objs: list[bpy.types.Object], bound_child_type: SollumType, apply_default_flags: bool = False):
     """Convert each object in ``objs`` to a Bound Composite."""
     for obj in objs:
-        convert_obj_to_composite(obj, bound_child_type, apply_default_flags, sollum_game_type)
+        convert_obj_to_composite(obj, bound_child_type, apply_default_flags)
 
 
-def convert_objs_to_single_composite(objs: list[bpy.types.Object], bound_child_type: SollumType, apply_default_flags: bool = False, sollum_game_type: SollumzGame = SollumzGame.GTA):
+def convert_objs_to_single_composite(objs: list[bpy.types.Object], bound_child_type: SollumType, apply_default_flags: bool = False):
     """Create a single composite from all ``objs``."""
     composite_obj = create_empty_object(SollumType.BOUND_COMPOSITE)
-    composite_obj.sollum_game_type = sollum_game_type
 
     for obj in objs:
         if bound_child_type == SollumType.BOUND_GEOMETRY:
-            convert_obj_to_geometry(obj, apply_default_flags, sollum_game_type)
+            convert_obj_to_geometry(obj, apply_default_flags)
             obj.parent = composite_obj
         else:
-            bvh_obj = convert_obj_to_bvh(obj, apply_default_flags, sollum_game_type)
+            bvh_obj = convert_obj_to_bvh(obj, apply_default_flags)
             bvh_obj.parent = composite_obj
 
             bvh_obj.location = obj.location
@@ -158,18 +157,17 @@ def center_composite_to_children(composite_obj: bpy.types.Object):
         obj.location -= center
 
 
-def convert_obj_to_composite(obj: bpy.types.Object, bound_child_type: SollumType, apply_default_flags: bool, sollum_game_type: SollumzGame):
+def convert_obj_to_composite(obj: bpy.types.Object, bound_child_type: SollumType, apply_default_flags: bool):
     composite_obj = create_empty_object(SollumType.BOUND_COMPOSITE)
     composite_obj.location = obj.location
     composite_obj.parent = obj.parent
-    composite_obj.sollum_game_type = sollum_game_type
     name = obj.name
 
     if bound_child_type == SollumType.BOUND_GEOMETRY:
-        convert_obj_to_geometry(obj, apply_default_flags, sollum_game_type)
+        convert_obj_to_geometry(obj, apply_default_flags)
         obj.parent = composite_obj
     else:
-        bvh_obj = convert_obj_to_bvh(obj, apply_default_flags, sollum_game_type)
+        bvh_obj = convert_obj_to_bvh(obj, apply_default_flags)
         bvh_obj.parent = composite_obj
 
     composite_obj.name = name
@@ -178,53 +176,43 @@ def convert_obj_to_composite(obj: bpy.types.Object, bound_child_type: SollumType
     return composite_obj
 
 
-def convert_obj_to_geometry(obj: bpy.types.Object, apply_default_flags: bool, sollum_game_type: SollumzGame):
+def convert_obj_to_geometry(obj: bpy.types.Object, apply_default_flags: bool):
     obj.sollum_type = SollumType.BOUND_GEOMETRY
     obj.name = f"{remove_number_suffix(obj.name)}.bound_geom"
 
     if apply_default_flags:
-        apply_default_flag_preset(obj, sollum_game_type)
-
-    obj.sollum_game_type = sollum_game_type
+        apply_default_flag_preset(obj)
 
 
-def convert_obj_to_bvh(obj: bpy.types.Object, apply_default_flags: bool, sollum_game_type: SollumzGame):
+def convert_obj_to_bvh(obj: bpy.types.Object, apply_default_flags: bool):
     obj_name = remove_number_suffix(obj.name)
 
     bvh_obj = create_empty_object(SollumType.BOUND_GEOMETRYBVH)
     bvh_obj.name = f"{obj_name}.bvh"
 
     obj.sollum_type = SollumType.BOUND_POLY_TRIANGLE
-    obj.sollum_game_type = sollum_game_type
     obj.name = f"{obj_name}.poly_mesh"
     obj.parent = bvh_obj
 
     if apply_default_flags:
-        apply_default_flag_preset(bvh_obj, sollum_game_type)
-
-    bvh_obj.sollum_game_type = sollum_game_type
+        apply_default_flag_preset(bvh_obj)
 
     return bvh_obj
 
 
-def apply_default_flag_preset(obj: bpy.types.Object, sollum_game_type: SollumzGame):
+def apply_default_flag_preset(obj: bpy.types.Object):
     load_flag_presets()
-    print(sollum_game_type)
-    if sollum_game_type == SollumzGame.RDR:
-        preset = flag_presets.presets[1]
-        flags_class = RDRBoundFlags
-        type_flags, include_flags = obj.type_flags, obj.include_flags
-    else:
-        preset = flag_presets.presets[0]
-        flags_class = BoundFlags
-        type_flags, include_flags = obj.composite_flags1, obj.composite_flags2
 
-    for flag_name in flags_class.__annotations__.keys():
-        flag_in_preset1 = flag_name in preset.flags1
-        flag_in_preset2 = flag_name in preset.flags2
+    preset = flag_presets.presets[0]
 
-        type_flags[flag_name] = flag_in_preset1
-        include_flags[flag_name] = flag_in_preset2
-        include_flags[flag_name] = flag_in_preset2
+    for flag_name in BoundFlags.__annotations__.keys():
+        if flag_name in preset.flags1:
+            obj.composite_flags1[flag_name] = True
+        else:
+            obj.composite_flags1[flag_name] = False
 
+        if flag_name in preset.flags2:
+            obj.composite_flags2[flag_name] = True
+        else:
+            obj.composite_flags2[flag_name] = False
     obj.margin = 0.005

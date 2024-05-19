@@ -14,6 +14,7 @@ from ..cwxml.shader import ShaderManager
 
 from .. import logger
 
+
 class AnimationFlag(IntFlag):
     Default = 0
     RootMotion = 16
